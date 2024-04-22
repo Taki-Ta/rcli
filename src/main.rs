@@ -5,7 +5,12 @@ fn main() -> anyhow::Result<()> {
     let opts = Opts::parse();
     match opts.cmd {
         SubCommand::Csv(opts) => {
-            process_csv(&opts.input, &opts.output)?;
+            let output = if let Some(output) = opts.output {
+                output
+            } else {
+                format!("output.{}", Into::<&'static str>::into(opts.format))
+            };
+            process_csv(&opts.input, output, opts.format)?;
         }
     }
     Ok(())
