@@ -1,8 +1,5 @@
-mod opts;
+mod cli;
 mod process;
 
-pub use opts::{Opts, SubCommand};
-pub use process::{
-    csv_convert::{process_csv, Player},
-    gen_pass::process_genpass,
-};
+pub use cli::{Base64Format, Bass64SubCommand, Opts, SubCommand};
+pub use process::*;
