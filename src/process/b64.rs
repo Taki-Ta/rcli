@@ -1,35 +1,26 @@
-use std::{fs::File, io::Read};
-
 use crate::cli::Base64Format;
+use crate::utils::get_reader;
 use anyhow::{Ok, Result};
 use base64::{
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
     Engine as _,
 };
+use std::io::Read;
 
-pub fn precess_encode(input: &str, format: Base64Format) -> Result<()> {
-    println!("input: {},format :{}", input, format);
+pub fn process_encode(input: &str, format: Base64Format) -> Result<String> {
     //set if and else condition to return same type value
     let mut reader: Box<dyn Read> = get_reader(input)?;
     let mut buffer = Vec::new();
     reader.read_to_end(&mut buffer)?;
 
-    match format {
-        Base64Format::Standard => {
-            let encoded = STANDARD.encode(&buffer);
-            println!("{}", encoded);
-        }
-        Base64Format::UrlSafe => {
-            let encoded = URL_SAFE_NO_PAD.encode(&buffer);
-            println!("{}", encoded);
-        }
-    }
-
-    Ok(())
+    let encode = match format {
+        Base64Format::Standard => STANDARD.encode(&buffer),
+        Base64Format::UrlSafe => URL_SAFE_NO_PAD.encode(&buffer),
+    };
+    Ok(encode)
 }
 
-pub fn precess_decode(input: &str, format: Base64Format) -> Result<()> {
-    println!("input: {},format :{}", input, format);
+pub fn process_decode(input: &str, format: Base64Format) -> Result<Vec<u8>> {
     let mut reader: Box<dyn Read> = get_reader(input)?;
     let mut buffer = String::new();
     reader.read_to_string(&mut buffer)?;
@@ -39,19 +30,7 @@ pub fn precess_decode(input: &str, format: Base64Format) -> Result<()> {
         Base64Format::UrlSafe => URL_SAFE_NO_PAD.decode(buffer)?,
     };
     //TODO decode data might not be string
-    let decode = String::from_utf8(decode)?;
-    println!("{}", decode);
-
-    Ok(())
-}
-
-fn get_reader(input: &str) -> Result<Box<dyn Read>> {
-    let reader: Box<dyn Read> = if input == "-" {
-        Box::new(std::io::stdin())
-    } else {
-        Box::new(File::open(input)?)
-    };
-    Ok(reader)
+    Ok(decode)
 }
 
 #[cfg(test)]
@@ -68,6 +47,6 @@ mod tests {
         use super::*;
         let input = "fixtures/b64.txt";
         let format = Base64Format::UrlSafe;
-        precess_decode(input, format).unwrap();
+        process_decode(input, format).unwrap();
     }
 }
