@@ -2,8 +2,7 @@ use crate::utils::get_reader;
 use crate::{cli::TextSignFormat, gen_pass};
 use anyhow::{Ok, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
-use ed25519::Signature;
-use ed25519_dalek::{Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
 use std::{fs, io::Read, path::Path};
 

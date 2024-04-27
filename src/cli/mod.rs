@@ -1,13 +1,12 @@
 mod base64;
 mod csv;
 mod genpass;
+mod http;
 mod text;
 
-pub use self::base64::{Base64Format, Bass64SubCommand};
-pub use self::csv::OutputFormat;
-use self::{csv::CsvOpts, genpass::GenPassOpts};
-pub use self::{text::TextSignFormat, text::TextSubCommand};
+pub use self::{base64::*, csv::*, genpass::*, http::*, text::*};
 use clap::Parser;
+use enum_dispatch::enum_dispatch;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Parser)]
@@ -18,15 +17,18 @@ pub struct Opts {
 }
 
 #[derive(Debug, Parser)]
+#[enum_dispatch(CmdExecute)]
 pub enum SubCommand {
     #[command(name = "csv", about = "convert csv to other formats")]
     Csv(CsvOpts),
     #[command(name = "genpass", about = "generate password")]
     Genpass(GenPassOpts),
-    #[command(subcommand)]
+    #[command(subcommand, about = "base64 encode/decode")]
     Base64(Bass64SubCommand),
-    #[command(subcommand)]
+    #[command(subcommand, about = "text sign/verify")]
     Text(TextSubCommand),
+    #[command(subcommand, about = "http serve")]
+    Http(HttpSubCommand),
 }
 
 fn verify_file(filename: &str) -> Result<String, &'static str> {
