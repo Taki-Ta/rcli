@@ -1,5 +1,8 @@
 use super::{verify_file, verify_path};
-use crate::{process_sign, process_verify, text::process_generate_key, CmdExecute};
+use crate::{
+    process_decrypt, process_encrypt, process_sign, process_verify, text::process_generate_key,
+    CmdExecute,
+};
 use clap::Parser;
 use enum_dispatch::enum_dispatch;
 use std::{path::PathBuf, str::FromStr};
@@ -13,6 +16,10 @@ pub enum TextSubCommand {
     Verify(TextVerifyOpts),
     #[command(about = "Generate a new key")]
     GenerateKey(TextKeyGenerateOpts),
+    #[command(about = "Encrypt a message with chacha20poly1305")]
+    Encrypt(EncryptOpts),
+    #[command(about = "Decrypt a message with chacha20poly1305")]
+    Decrypt(DecryptOpts),
 }
 
 #[derive(Debug, Parser)]
@@ -43,6 +50,26 @@ pub struct TextKeyGenerateOpts {
     pub format: TextSignFormat,
     #[arg(short,long,value_parser=verify_path)]
     pub output: PathBuf,
+}
+
+#[derive(Debug, Parser)]
+pub struct EncryptOpts {
+    #[arg(short,long,value_parser=verify_file,default_value = "-")]
+    pub input: String,
+    #[arg(short, long)]
+    pub key: String,
+    #[arg(short, long)]
+    pub nonce: String,
+}
+
+#[derive(Debug, Parser)]
+pub struct DecryptOpts {
+    #[arg(short,long,value_parser=verify_file,default_value = "-")]
+    pub input: String,
+    #[arg(short, long)]
+    pub key: String,
+    #[arg(short, long)]
+    pub nonce: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -111,6 +138,22 @@ impl CmdExecute for TextKeyGenerateOpts {
                 tokio::fs::write(name, &kyes[1]).await?;
             }
         }
+        Ok(())
+    }
+}
+
+impl CmdExecute for EncryptOpts {
+    async fn execute(self) -> anyhow::Result<()> {
+        let res = process_encrypt(&self.input, self.key, self.nonce)?;
+        println!("encrypt result is {}", res);
+        Ok(())
+    }
+}
+
+impl CmdExecute for DecryptOpts {
+    async fn execute(self) -> anyhow::Result<()> {
+        let res = process_decrypt(&self.input, self.key, self.nonce)?;
+        println!("encrypt result is {}", res);
         Ok(())
     }
 }

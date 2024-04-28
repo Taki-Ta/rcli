@@ -35,10 +35,7 @@ async fn file_handler(
     let p = std::path::Path::new(&state.path).join(path);
     info!("Reading file  {:?}", p);
     if !p.exists() {
-        (
-            StatusCode::NOT_FOUND,
-            format!("File not found {:?}", p.display()),
-        )
+        (StatusCode::NOT_FOUND, format!("File not found"))
     } else {
         //todo test p is a directory
         //if it is a directory, list all files/subdirectories
@@ -80,6 +77,6 @@ mod tests {
         let path = Path("not_found.txt".to_string());
         let (status, content) = file_handler(State(state), path).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
-        assert_eq!(content, "File not found \"./not_found.txt\"");
+        assert_eq!(content, "File not found");
     }
 }

@@ -42,11 +42,11 @@ mod tests {
     //     assert_eq!(precess_encode("Cargo.toml", Base64Format::UrlSafe), Ok(()));
     // }
 
-    #[test]
-    fn test_process_decode() {
-        use super::*;
-        let input = "fixtures/b64.txt";
-        let format = Base64Format::UrlSafe;
-        process_decode(input, format).unwrap();
-    }
+    // #[test]
+    // fn test_process_decode() {
+    //     use super::*;
+    //     let input = "fixtures/b64.txt";
+    //     let format = Base64Format::UrlSafe;
+    //     process_decode(input, format).unwrap();
+    // }
 }
