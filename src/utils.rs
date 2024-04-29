@@ -9,3 +9,10 @@ pub fn get_reader(input: &str) -> Result<Box<dyn Read>> {
     };
     Ok(reader)
 }
+
+pub fn get_file_content(input: &str) -> Result<Vec<u8>> {
+    let mut reader: Box<dyn Read> = get_reader(input)?;
+    let mut buffer = Vec::new();
+    reader.read_to_end(&mut buffer)?;
+    Ok(buffer)
+}

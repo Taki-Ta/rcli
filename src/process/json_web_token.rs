@@ -1,114 +1,67 @@
-use crate::{get_reader, TextSign, TextVerify};
-use jsonwebtoken::{encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use crate::get_file_content;
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::time::Duration;
-use std::{io::Read, string};
+use std::time::UNIX_EPOCH;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct JWTSigner {
-    sub: Option<String>,
-    aud: Option<String>,
-    exp: Option<Duration>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct JWTVerify {}
-
-impl JWTSigner {
-    pub fn new(sub: Option<String>, aud: Option<String>, exp: Option<Duration>) -> Self {
-        JWTSigner { sub, aud, exp }
-    }
-}
-
-impl TextSign for JWTSigner {
-    fn sign(&self, reader: &mut dyn Read) -> anyhow::Result<Vec<u8>> {
-        let mut buffer = Vec::new();
-        reader.read_to_end(&mut buffer)?;
-        println!("key is {}", std::str::from_utf8(buffer.as_ref())?);
-
-        let token = encode(
-            &Header::default(),
-            &self,
-            &EncodingKey::from_secret(&buffer.as_ref()),
-        )
-        .unwrap();
-        Ok(token.as_bytes().to_vec())
-    }
-}
-
-impl TextVerify for JWTVerify {
-    fn verify(&self, reader: &mut dyn Read, sig: &[u8]) -> anyhow::Result<bool> {
-        let mut buffer = Vec::new();
-        reader.read_to_end(&mut buffer)?;
-        let token = std::str::from_utf8(sig)?;
-        let key = std::str::from_utf8(buffer.as_ref())?;
-        println!("token2 is {}", token);
-        println!("key2 is {:?}", &buffer);
-        println!("key is {:?}", key);
-        match jsonwebtoken::decode::<JWTSigner>(
-            token,
-            &DecodingKey::from_secret(&key.as_ref()),
-            &Validation::new(Algorithm::HS256),
-        ) {
-            Ok(_) => Ok(true),
-            Err(err) => anyhow::Result::Err(err.into()),
-        }
-    }
+pub struct Claims {
+    sub: String,
+    aud: String,
+    exp: usize,
 }
 
 pub fn process_jwt_sign(
-    key: &str,
-    sub: Option<String>,
-    aud: Option<String>,
-    exp: Option<Duration>,
+    sub: String,
+    exp: usize,
+    aud: String,
+    alg: Algorithm,
 ) -> anyhow::Result<String> {
-    let mut reader = get_reader(key)?;
-    let signer = JWTSigner::new(sub, aud, exp);
-    let sig = signer.sign(&mut reader)?;
-    Ok(String::from_utf8(sig)?)
+    let now = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)?
+        .as_secs() as usize;
+    let claims = Claims {
+        sub: sub.to_string(),
+        aud: aud.to_string(),
+        exp: now + exp,
+    };
+    let key = get_file_content("fixtures/jwt.key")?;
+    let key = key.as_slice();
+
+    let header = Header {
+        alg,
+        ..Default::default()
+    };
+
+    let token = encode(&header, &claims, &EncodingKey::from_secret(key))?;
+    Ok(token)
 }
 
-pub fn process_jwt_verify(input: &str, token: &str) -> anyhow::Result<bool> {
-    let mut reader = get_reader(input)?;
-    Ok(JWTVerify {}.verify(&mut reader, token.as_bytes())?)
+pub fn process_jwt_verify(token: String, aud: String, alg: Algorithm) -> anyhow::Result<bool> {
+    let key = get_file_content("fixtures/jwt.key")?;
+    let key = key.as_slice();
+
+    let mut validation = Validation::new(alg);
+    validation.set_audience(&[aud]);
+    validation.set_required_spec_claims(&["aud", "exp", "sub"]);
+
+    let data = decode::<Claims>(&token, &DecodingKey::from_secret(key), &validation)?;
+    println!("{:?}", data.claims);
+
+    Ok(true)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
 
     #[test]
-    fn test_jwt_sign() {
-        let key = "test_key";
-        let sub = Some("test_sub".to_string());
-        let aud = Some("test_aud".to_string());
-        let exp = Some(Duration::from_secs(3600));
-        let signer = JWTSigner::new(sub, aud, exp);
-        let mut reader = Cursor::new(key);
-        let sig = signer.sign(&mut reader).unwrap();
-        let token = String::from_utf8(sig).unwrap();
-        println!("token is {}", token);
+    fn test_process_jwt_sign_verify() -> anyhow::Result<()> {
+        let sub = "taki_1".to_string();
+        let exp = 3600;
+        let aud = "taki_2".to_string();
+        let alg = Algorithm::HS256;
+        let token = process_jwt_sign(sub, exp, aud.clone(), alg)?;
+        process_jwt_verify(token, aud, alg)?;
+        Ok(())
     }
-
-    // #[test]
-    // fn test_jwt_verify() {
-    //     let key = "test_key";
-    //     let sub = Some("test_sub".to_string());
-    //     let aud = None;
-    //     let exp = Some(Duration::from_secs(3600));
-    //     let mut reader=Cursor::new(key);
-    //     let signer = JWTSigner::new(sub, aud, exp);
-    //     let token=signer.sign(&mut reader).unwrap();
-    //     let token=String::from_utf8(token).unwrap();
-
-    //     println!("token1 is {}",token);
-    //     println!("key1 is {:?}",key);
-    //     let mut reader=Cursor::new(key);
-    //     let verify = JWTVerify{};
-    //     let res = verify.verify(&mut reader, token.as_bytes()).unwrap();
-    //     jsonwebtoken::decode::<JWTSigner>(&token, &DecodingKey::from_secret(key.as_ref()), &Validation::new(Algorithm::HS256));
-
-    // }
 }

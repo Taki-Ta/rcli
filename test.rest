@@ -1,8 +1,8 @@
 ### Test index page
 
-GET  http://localhost:8080/fixtures/b64.txt
+GET  http://localhost:8080/fixtures/
 
 ### Test tower-http
 
-GET  http://localhost:8080/tower/fixtures/b64.txt
+GET  http://localhost:8080/tower/fixtures/
 Accept-Encoding: gzip

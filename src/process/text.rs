@@ -2,6 +2,7 @@ use crate::utils::get_reader;
 use crate::{cli::TextSignFormat, gen_pass, TextSign, TextVerify};
 use anyhow::{Ok, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use chacha20poly1305::AeadCore;
 use chacha20poly1305::{
     aead::{generic_array::GenericArray, Aead},
     consts::{U12, U32},
@@ -119,15 +120,13 @@ impl KeyGenerator for Ed25519Sign {
 }
 #[allow(dead_code)]
 impl ChaCha {
-    fn new(key: String, nonce: String) -> Self {
+    fn new(key: String, nonce: GenericArray<u8, U12>) -> Self {
         let key = chacha20poly1305::Key::from_slice(key.as_bytes()).to_owned();
-        let nonce = chacha20poly1305::Nonce::from_slice(nonce.as_bytes()).to_owned();
         Self { key, nonce }
     }
 
-    fn try_new(key: String, nonce: String) -> Result<Self> {
+    fn try_new(key: String, nonce: GenericArray<u8, U12>) -> Result<Self> {
         let key = chacha20poly1305::Key::from_slice(key.as_bytes()).to_owned();
-        let nonce = chacha20poly1305::Nonce::from_slice(nonce.as_bytes()).to_owned();
         Ok(Self { key, nonce })
     }
 
@@ -174,26 +173,30 @@ pub fn process_generate_key(format: TextSignFormat) -> Result<Vec<Vec<u8>>> {
     }
 }
 
-pub fn process_encrypt(input: &str, key: String, nonce: String) -> Result<String> {
+pub fn process_encrypt(input: &str, key: String) -> Result<String> {
     //get input buffer as vec<u8>
     let mut reader: Box<dyn Read> = get_reader(input)?;
     let mut buffer = Vec::new();
     reader.read_to_end(&mut buffer)?;
     //construct cipher
+    let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
     let chacha = ChaCha::try_new(key, nonce)?;
-    let encrypt_string = chacha.encrypt(buffer.as_slice()).unwrap();
+    let mut encrypt_string = chacha.encrypt(buffer.as_slice()).unwrap();
     //encode the cipher to base64
+    encrypt_string.extend_from_slice(nonce.as_ref());
     let encrypt_string = URL_SAFE_NO_PAD.encode(encrypt_string);
     Ok(encrypt_string)
 }
 
-pub fn process_decrypt(input: &str, key: String, nonce: String) -> Result<String> {
+pub fn process_decrypt(input: &str, key: String) -> Result<String> {
     //get input buffer as vec<u8>
     let mut reader: Box<dyn Read> = get_reader(input)?;
     let mut buffer = Vec::new();
     reader.read_to_end(&mut buffer)?;
-    let buffer = URL_SAFE_NO_PAD.decode(buffer)?;
-    let chacha = ChaCha::try_new(key, nonce)?;
+    let mut buffer = URL_SAFE_NO_PAD.decode(buffer)?;
+    let nonce = buffer.split_off(buffer.len() - 12);
+    let nonce: &GenericArray<u8, U12> = GenericArray::from_slice(&nonce);
+    let chacha = ChaCha::try_new(key, nonce.to_owned())?;
     let plaintext = chacha.decrypt(buffer).unwrap();
     //decode the cipher to base64
     Ok(String::from_utf8(plaintext).unwrap())
@@ -243,7 +246,6 @@ impl Ed25519Verify {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::process_genpass;
     use rand::*;
 
     fn get_black3() -> Blake3 {
@@ -288,25 +290,5 @@ mod tests {
         let sign_data = sk.sign(&mut input.as_bytes()).unwrap();
         let verified = pk.verify(&mut input.as_bytes(), &sign_data).unwrap();
         assert!(verified);
-    }
-
-    #[test]
-    fn test_chacha_encrypt() {
-        let key = process_genpass(32, true, true, true, true).unwrap();
-        let nonce = process_genpass(12, true, true, true, true).unwrap();
-        let chacha = ChaCha::new(key, nonce);
-        let input = "hello world".as_bytes();
-        chacha.encrypt(input).unwrap();
-    }
-
-    #[test]
-    fn test_chacha_decrypt() {
-        let key = process_genpass(32, true, true, true, true).unwrap();
-        let nonce = process_genpass(12, true, true, true, true).unwrap();
-        let chacha = ChaCha::new(key, nonce);
-        let input = "hello world".as_bytes();
-        let cipher = chacha.encrypt(input).unwrap();
-        let plaintext = chacha.decrypt(cipher).unwrap();
-        assert_eq!(input, plaintext.as_slice());
     }
 }

@@ -1,9 +1,11 @@
+use crate::get_file_content;
 use anyhow::Result;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
+    response::{Html, IntoResponse, Response},
     routing::get,
-    Router,
+    Json, Router,
 };
 use std::{path::PathBuf, sync::Arc};
 use tower_http::services::ServeDir;
@@ -31,32 +33,60 @@ pub async fn process_http_serve(path: PathBuf, port: u16) -> Result<()> {
 async fn file_handler(
     State(state): State<Arc<HttpServeState>>,
     Path(path): Path<String>,
-) -> (StatusCode, String) {
+) -> (StatusCode, Response) {
     let p = std::path::Path::new(&state.path).join(path);
     info!("Reading file  {:?}", p);
     if !p.exists() {
-        (StatusCode::NOT_FOUND, format!("File not found"))
+        (
+            StatusCode::NOT_FOUND,
+            "File not found".to_string().into_response(),
+        )
+    } else if p.is_dir() {
+        match std::fs::read_dir(p.clone()) {
+            Ok(entries) => {
+                let tmpl = get_file_content("fixtures/tmpl.html").unwrap();
+                let tmpl = String::from_utf8(tmpl).unwrap();
+                let mut content = String::new();
+                for entry in entries {
+                    let entry = entry.unwrap();
+                    let path = entry.path();
+                    let name = path.file_name().unwrap().to_str().unwrap();
+                    content.push_str(&format!(
+                        r#"<li><a href="/tower/{}">{}</a></li>"#,
+                        //get the relative path
+                        path.strip_prefix(&state.path).unwrap().to_string_lossy(),
+                        name
+                    ));
+                }
+                let res = Html(tmpl.replace("{{content}}", &content));
+                (StatusCode::OK, res.into_response())
+            }
+            Err(e) => {
+                warn!("Error reading dir {:?} : {:?}", p.display(), e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Error reading dir".into_response(),
+                )
+            }
+        }
     } else {
-        //todo test p is a directory
-        //if it is a directory, list all files/subdirectories
-        //as <li><a href="path/to/file">file</a></li>
-        let content = match tokio::fs::read_to_string(&p).await {
-            Ok(content) => content,
+        match tokio::fs::read_to_string(&p).await {
+            Ok(content) => (StatusCode::OK, Json(content).into_response()),
             Err(e) => {
                 warn!("Error reading file {:?} : {:?}", p.display(), e);
-                return (
+                (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "Error reading file".to_string(),
-                );
+                    "Error reading file".into_response(),
+                )
             }
-        };
-        (StatusCode::OK, content)
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::to_bytes;
 
     #[tokio::test]
     async fn test_file_handler() {
@@ -66,7 +96,9 @@ mod tests {
         let path = Path("Cargo.toml".to_string());
         let (status, content) = file_handler(State(state), path).await;
         assert_eq!(status, StatusCode::OK);
-        assert!(content.contains("[package]"));
+        let bytes = to_bytes(content.into_body(), usize::MAX).await.unwrap();
+        let body_string = String::from_utf8(bytes.to_vec()).unwrap();
+        assert!(body_string.contains("[package]"));
     }
 
     #[tokio::test]
@@ -77,6 +109,8 @@ mod tests {
         let path = Path("not_found.txt".to_string());
         let (status, content) = file_handler(State(state), path).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
-        assert_eq!(content, "File not found");
+        let bytes = to_bytes(content.into_body(), usize::MAX).await.unwrap();
+        let body_string = String::from_utf8(bytes.to_vec()).unwrap();
+        assert_eq!(body_string, "File not found".to_string());
     }
 }

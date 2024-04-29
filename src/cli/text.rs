@@ -58,8 +58,6 @@ pub struct EncryptOpts {
     pub input: String,
     #[arg(short, long)]
     pub key: String,
-    #[arg(short, long)]
-    pub nonce: String,
 }
 
 #[derive(Debug, Parser)]
@@ -68,8 +66,6 @@ pub struct DecryptOpts {
     pub input: String,
     #[arg(short, long)]
     pub key: String,
-    #[arg(short, long)]
-    pub nonce: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -144,7 +140,7 @@ impl CmdExecute for TextKeyGenerateOpts {
 
 impl CmdExecute for EncryptOpts {
     async fn execute(self) -> anyhow::Result<()> {
-        let res = process_encrypt(&self.input, self.key, self.nonce)?;
+        let res = process_encrypt(&self.input, self.key)?;
         println!("encrypt result is {}", res);
         Ok(())
     }
@@ -152,7 +148,7 @@ impl CmdExecute for EncryptOpts {
 
 impl CmdExecute for DecryptOpts {
     async fn execute(self) -> anyhow::Result<()> {
-        let res = process_decrypt(&self.input, self.key, self.nonce)?;
+        let res = process_decrypt(&self.input, self.key)?;
         println!("encrypt result is {}", res);
         Ok(())
     }
