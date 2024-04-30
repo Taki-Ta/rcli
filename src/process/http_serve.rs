@@ -5,8 +5,9 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse, Response},
     routing::get,
-    Json, Router,
+    Router,
 };
+use std::path::Path as StdPath;
 use std::{path::PathBuf, sync::Arc};
 use tower_http::services::ServeDir;
 use tracing::{info, warn};
@@ -20,6 +21,7 @@ pub async fn process_http_serve(path: PathBuf, port: u16) -> Result<()> {
     info!("Serving {:?} on port {}", path, port);
     let state = HttpServeState { path: path.clone() };
     let router = Router::new()
+        .route("/", get(root_handler))
         .route("/*key", get(file_handler))
         .nest_service("/tower", ServeDir::new(path))
         .with_state(Arc::new(state));
@@ -34,7 +36,18 @@ async fn file_handler(
     State(state): State<Arc<HttpServeState>>,
     Path(path): Path<String>,
 ) -> (StatusCode, Response) {
-    let p = std::path::Path::new(&state.path).join(path);
+    execute(&state.path, Some(&path)).await
+}
+
+async fn root_handler(State(state): State<Arc<HttpServeState>>) -> (StatusCode, Response) {
+    execute(&state.path, None).await
+}
+
+async fn execute(serve_path: &PathBuf, req_path: Option<&str>) -> (StatusCode, Response) {
+    let p: PathBuf = match req_path {
+        Some(p) => serve_path.join(p),
+        None => serve_path.to_owned(),
+    };
     info!("Reading file  {:?}", p);
     if !p.exists() {
         (
@@ -51,12 +64,7 @@ async fn file_handler(
                     let entry = entry.unwrap();
                     let path = entry.path();
                     let name = path.file_name().unwrap().to_str().unwrap();
-                    content.push_str(&format!(
-                        r#"<li><a href="/tower/{}">{}</a></li>"#,
-                        //get the relative path
-                        path.strip_prefix(&state.path).unwrap().to_string_lossy(),
-                        name
-                    ));
+                    content.push_str(&create_link(&path, name, serve_path));
                 }
                 let res = Html(tmpl.replace("{{content}}", &content));
                 (StatusCode::OK, res.into_response())
@@ -71,7 +79,7 @@ async fn file_handler(
         }
     } else {
         match tokio::fs::read_to_string(&p).await {
-            Ok(content) => (StatusCode::OK, Json(content).into_response()),
+            Ok(content) => (StatusCode::OK, content.into_response()),
             Err(e) => {
                 warn!("Error reading file {:?} : {:?}", p.display(), e);
                 (
@@ -81,6 +89,18 @@ async fn file_handler(
             }
         }
     }
+}
+
+fn create_link(path: &StdPath, name: &str, serve_path: &StdPath) -> String {
+    let relative_path = if path.is_dir() {
+        path.to_string_lossy().to_string()
+    } else {
+        path.strip_prefix(serve_path)
+            .unwrap()
+            .to_string_lossy()
+            .to_string()
+    };
+    format!(r#"<li><a href="/{}">{}</a></li>"#, relative_path, name)
 }
 
 #[cfg(test)]
