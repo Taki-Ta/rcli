@@ -25,7 +25,7 @@ impl CmdExecute for CsvOpts {
         } else {
             format!("output.{}", Into::<&'static str>::into(self.format))
         };
-        process_csv(&self.input, output, self.format)?;
+        process_csv(&self.input, output, self.format)?; 
         Ok(())
     }
 }
